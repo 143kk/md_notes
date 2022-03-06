@@ -669,9 +669,52 @@ For an object parameter, the method gets a copy of the object reference, and bot
 
 ### 4.6.1 Overloading
 
-Overloading refers to that several methods have the same name but different parameters.
+**Overloading**(**NOT overriding**) refers to that several methods have the same name but different parameters.
 
 You are allowed to overload any methods, including constructor methods.
+
+Unlike C++, overloading works regardless of **whether the method was defined at this level or in a base class.** For example,
+
+```java
+//: reusing/Hide.java
+// Overloading a base-class method name in a derived
+// class does not hide the base-class versions.
+import static net.mindview.util.Print.*;
+class Homer {
+	char doh(char c) {
+		print("doh(char)");
+		return ‘d’;
+	}
+	float doh(float f) {
+ 		print("doh(float)");
+ 		return 1.0f;
+ 	}
+}
+class Milhouse {}
+class Bart extends Homer {
+	void doh(Milhouse m) {
+	print("doh(Milhouse)");
+	}
+}
+public class Hide {
+	public static void main(String[] args) {
+		Bart b = new Bart()；
+		b.doh(1);
+		b.doh(‘x’);
+		b.doh(1.0f);
+ 		b.doh(new Milhouse());
+	}
+} 
+
+/* Output:
+doh(float)
+doh(char)
+doh(float)
+doh(Milhouse)
+*///:~ 
+```
+
+
 
 ### 4.6.2 Default Field Initialization
 
@@ -842,6 +885,8 @@ The body of the compact form is the “prelude” to the canonical constructor. 
 
 In order to absolutely guarantee a unique package name, it's common to use an Internet domain name written in reverse and then append a project name, such as `com.horstmann.corejava`.
 
+The convention for Java package names is to use all lowercase letters, even for intermediate words.
+
 From the point of view of the compiler, there is absolutely no relationship between nested packages. For example, the packages `java.util` and `java.util.jar` have nothing to do with each other. Each is its own independent collection of classes.
 
 ### 4.8.2 Class Importation
@@ -907,7 +952,7 @@ import static java.lang.System.out;
 
 ### 4.8.4 Addition of a Class into a Package
 
-To place classes inside a package, put the name of the package **at the top** of your source file, **before** any code.
+To place classes inside a package, put the name of the package **at the top** of your source file, **before** any non-comment code.
 
 For example,
 
@@ -926,7 +971,14 @@ If you don't put a `package` statement in the source file, then the classes in t
 
 ### 4.8.6 The Class Path
 
-> The class path is the path that the Java Runtime Environment (JRE) searches for classes and other resource files.
+The process of locating `.class` files is as follows. 
+
+- First, it finds the environment variable `CLASSPATH`, which contains one or more directories that are used as roots in a search for `.class` files. 
+- Starting at that root, the interpreter will take the package name and replace each dot with a slash to generate a path name off of the `CLASSPATH` root (so package `foo.bar.baz` becomes `foo/bar/baz` ). This is then concatenated to the various entries in the `CLASSPATH`. That’s where it looks for the `.class` file with the name corresponding to the class you’re trying to create. 
+
+There’s a variation when using JAR files, however. You must put the actual name of the JAR file in the `CLASSPATH`, not just the path where it’s located.
+
+----
 
 It is best to specify the class path with the option -classpath (or -cp or, as of Java 9, --class-path):
 
@@ -997,7 +1049,11 @@ class Manager extends Employee {
 }
 ```
 
-When you override a method, the subclass method must be at least as visible as the superclass method. For example, if the superclass method is `public`, then the subclass method must also be declared `public`.
+When you override a method, the subclass method must have the same signature and return type as in the base class.
+
+Furthermore, the subclass method must be at least as visible as the superclass method. For example, if the superclass method is `public`, then the subclass method must also be declared `public`.
+
+When you mean to override a method, you can choose to add the `@Override` annotation and the complier will produce an error message if you accidentally overload instead of overriding.
 
 ### 5.1.3 Subclass Constructors
 
@@ -1539,4 +1595,24 @@ The rules for resolving such conflicts are as follows:
 You can never make a default method that redefines one of the methods in `Object` class. For example, you cannot define a default method for `toString` or `equals` because of the *superclasses win* rule.
 
 ### 6.1.8 The `Comparator` Interface
+
+There's a second version of the `Arrays.sort` method whose parameter are an array, and a *comparator*, which is an instance of a class that implements the `Comparator` interface.
+
+```java
+public interface Comparator<T> {
+	int compare(T first, T second);
+}
+```
+
+For example, you want to compare strings by length, then define a class that implements `Comparator<String>`.
+
+```java
+class LengthComparator implements Comparator<String> {
+    public int compare(String first, String second) {
+        return first.length() - second.length();
+    }
+}
+```
+
+
 
