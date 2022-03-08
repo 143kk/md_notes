@@ -1149,6 +1149,15 @@ Here's a summary of the four access control modifiers in Java:
 - `protected`: accessible in the **package** and all subclasses
 - `package`: accessible in the package, the **default** modifier
 
+The `protected` modifier needs a bit more description when inheritance come into play. The following rule edited from [cppreference.org](http://en.cppreference.com/w/cpp/language/access#Protected_member_access) applies in Java:
+
+> A protected member of a class is only accessible to the **current package** as well as
+>
+> - to the members of that class;
+> - to the members of any derived class of that class, but only when the class of the object through which **the protected member is accessed is that derived class or a derived class of that derived class**.
+
+That's also the reason why you cannot simply invoke the `clone` method, which is mentioned in the next few chapters.
+
 ## 5.2 `Object`: The Cosmic Superclass
 
 In Java, only the values of primitive types(numbers, characters, and boolean values) are not objects and every class extends `Object`.
@@ -1612,7 +1621,203 @@ class LengthComparator implements Comparator<String> {
         return first.length() - second.length();
     }
 }
+...
+String[] friends = {"Peter", "Paul", "Mary"};
+Arrays.sort(friends, new LengthComparator);
 ```
+
+### 6.1.9 Object Cloning
+
+The default cloning operation is "shallow", i.e., it doesn't clone objects that are referenced inside other objects. If the object is immutable, the sharing is safe. But for mutable, you might not expect such a behavior.
+
+The `clone` method is a `protected` method of `Object`, which means that your code cannot simply call it.
+
+For every class, you need to decide whether:
+
+1. The default `clone` method is good enough;
+2. The default `clone` method can be patched up by calling `clone` on the mutable subobjects; or
+3. `clone` should not be attemped.
+
+The third option is actually the default. To choose either the first or the second option, a class must
+
+1. **Implement the `Clonable` interface; and**
+2. Redefine the `clone` method with the **`public` access modifier**.
+
+Note that the `Clonable` interface does not specify the `clone` method -- that method is inherited from the `Object` class. Here, the interface merely **serves as a tag**, indicating that the class designer understands the cloning process.
+
+The `clone` method of the `Object` class threatens to throw a `CloneNotSupportException` -- it does that whenever `clone` is invoked on an object whose class does not implement the `Cloneable` interface.
+
+## 6.2 Lambda Expressions
+
+### 6.2.2 The Syntax of Lambda Expressions
+
+Lambda expressions comprises of parameters, the `->` arrow, and an expression. If the code carries out a computation that doesn't fit in a single expression, make it enclosed in `{}` and possibly write explicit `return` statements. For example,
+
+```java
+(String first, String second) -> first.length() - second.length();
+
+(String first, String second) -> {
+	if (first.length() < second.length()) return -1;
+    else if (first.length() > second.length()) return 1;
+    else return 0;
+}
+```
+
+Even a lambda expression has no parameters, you still need to supply empty parentheses. For example,
+
+```java
+() -> { for(int i = 100; i >= 0; i--) System.out.println(i); }
+```
+
+If the parameter types of a lambda expression can be inferred, you can omit them. For example, 
+
+```java
+Comparator<String> comp = (first, second) -> first.length() - second.length();
+```
+
+Moreover, if a method has a single parameter with inferred type, you can even omit the parentheses:
+
+```java
+ActionListener listener = event -> System.out.println("...");
+```
+
+You never specify the return type of a lambda expression. It's always inferred from the context.
+
+### 6.2.3 Functional Interfaces
+
+You can supply a lambda expression whenever an object of an interface with a **single abstract method** is expected. Such as interface is called a *functional interface*.
+
+To demonstrate the conversion to a functional interface, consider the `Arrays.sort` method, which receives an object of some class that implements `Comparator<T>`.
+
+```java
+Arrays.sort(words, (first, second) -> first.length() - second.length());
+```
+
+In fact, conversion to a functional interface is the **only** thing that you can do with a lambda expression in Java. Java does not support function types to save lambda expressions.
+
+----
+
+The Java API defines a number of very generic functional interfaces in the `java.util.function` package.
+
+For example, one useful functional interface is `Supplier<T>`, which are used for lazy evaluation. For example, 
+
+```java
+LocalDate hireDay = Objects.requireNonNullElseGet(day, () -> new LocalDate.of(1970, 1, 1));
+```
+
+The object of the `LocalDate` class is constructed only when `day` is null.
+
+---
+
+If you design your own interface with a single abstract method, you can tag it with the `@FunctionalInterface` annotation. It's not mandatory but recommended.
+
+### 6.2.4 Method References
+
+```java
+var timer = new Timer(1000, System.out::println);
+```
+
+The expression `System.out::println` is a *method reference*. It directs the complier to produce an instance of a functional interface, overriding the single abstract method of the interface to call the given method.
+
+There are ten overloaded `println` methods, thus the complier needs to figure out which one to use. In the above example, the method reference `System.out::println` must be turned into an `ActionListener` instance with a method
+
+```java
+void actionPerformed(ActionEvent e)
+```
+
+The `println(Object x)` is selected from the ten overloaded methods since `Object` is the best match `ActionEvent`.
+
+----
+
+There are three variants of method references. They are shown as below, each with an example.
+
+- `object::instanceMethod`
+
+  e.g. `System.out::println`  is equivalent to `x -> System.out.println(x)`.
+
+- `Class::instanceMethod`
+
+  The first parameter becomes the implicit parameter of the method.
+
+  e.g. `String::compareToIgnoreCase` is the same as `(x, y) -> x.compareToIgnoreCase(y)`.
+
+- `Class::staticMethod`
+
+  eg. `Math.pow` is the same as `(x, y) -> Math.pow(x, y)`.
+
+---
+
+You can capture the `this` parameter in a method reference. For example, `this::equal` is the same as `x -> this.equals(x)`. Similarly, it's valid to use use the method expression `super::instanceMethod`.
+
+### 6.2.5 Constructor References
+
+Constructor references are just like method references, except that the name of the method is `new`. e.g. `Person::new`
+
+You can form constructor references with array types. e.g. `int[]::new`
+
+### 6.2.6 Variable Scope
+
+A lambda expression has three ingredients:
+
+- a block of code
+- parameters
+- values for *free variables*, that is, the variables that are not parameters and not defined inside the code
+
+In Java, lambda expressions are **closures**. The data structure representing the lambda expression must store the values for the free variables.
+
+Any free variables captured must be **effectively final**, that is, the variable is never assigned a new value after it has been initialize. Therefore, you cannot mutate such variables either inside or outside the lambda expression.
+
+When you use the `this` keyword in a lambda expression, you refer to the `this` parameter of the method that creates the lambda. For example, consider
+
+```java
+public class Application {
+    public void init() {
+        ActionListener listener = event -> {
+            System.out.println(this.toString());
+        }
+    }
+}
+```
+
+The expression `this.toString()` calls the `toString` method of the `Applicatio`
+
+---
+
+The same rules for name conflicts and shadowing apply. Two local variables with the same name are not allowed.
+
+Furthermore, It's illegal to declare a parameter or a local variable in the lambda that has the same name as a local variable.
+
+### 6.2.8 More about Comparators
+
+The `Comparator` interface has a number of convenient static methods for creating comparators.
+
+The static `comparing` method takes a "key extractor", which is applied to the objects to be compared, and the comparison is then made on the returned keys.
+
+```java
+Array.sort(people, Comparator.comparing(Person::getName));
+```
+
+You can chain comparators with the `thenComparing` method for breaking ties.
+
+```
+Array.sort(people, Comparator.comparing(Person::getName).thenComparing(Person::getFirstName));
+```
+
+You can also specify a comparator to be used.
+
+```java
+Array.sort(people, Comparator.comparing(People.getName, (s, t) -> Integer.compare(s.length(), t.length())));
+```
+
+There are some other useful methods, such as `nullFirst`, `nullLast`, `naturalOrder`, `reversed`, `reverseOrder`.
+
+## 6.3 Inner Classes
+
+
+
+
+
+
 
 
 
