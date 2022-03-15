@@ -877,9 +877,9 @@ SELECT ... FROM fdt WHERE EXISTS (SELECT c1 FROM t2 WHERE c2 > fdt.c1);
 
 #### 7.2.3 The `GROUP BY` and `HAVING` clauses
 
-After passing the `WHERE` filter, the derived input table might be subject to grouping, using the `GROUP BY` clause, and elimination of group rows using the `HAVING` clause.
+After passing the `WHERE` filter, the derived input table might be subject to grouping, using the `GROUP BY` clause, and *elimination of group rows using the `HAVING` clause.
 
-In general, if a table is grouped, columns that are not listed in `GROUP BY` cannot be referenced except in aggregate expressions (One of the exceptions is to group by primary key).
+In general, if a table is grouped, **columns that are not listed in `GROUP BY` cannot be referenced except in aggregate expressions (One of the exceptions is to group by primary key)**.
 
 ```sql
 SELECT product_id, p.name, (sum(s.units) * p.price) AS sales
@@ -929,8 +929,10 @@ After the select list has been processed, the result table can optionally be sub
 <pre>
     SELECT DISTINCT <em>select_list</em> ...
 </pre>
+Note that the keyword `DISTINCT` is applied to the **entire `select_list`**, rather than a specific column.
 
-Two rows are considered distinct if they differ in at least one column value.
+Two rows are considered distinct if they differ in at least one column value. Null values are
+considered equal in this comparison.
 
 Alternatively, an arbitrary expression can determine what rows are to be considered distinct:
 
@@ -1894,7 +1896,8 @@ For example,
 
 ```
 SELECT a,
-    CASE a WHEN 1 THEN 'one'
+    CASE a 
+    WHEN 1 THEN 'one'
     WHEN 2 THEN 'two'
     ELSE 'other'
     END
@@ -1906,7 +1909,21 @@ a | case
 3 | other
 ```
 
+Since the second form of `CASE` clause implicitly use equality test(`=`), you cannot not write something like `CASE a WHEN null...`. Instead, you should use `CASE WHEN a is null...`. 
 
+## 9.21 Aggregate Functions
+
+Aggregate functions compute a single result from a set of input values.
+
+Commonly used aggregate functions:
+
+| Function                             | Description                                                  |
+| ------------------------------------ | ------------------------------------------------------------ |
+| `count(*)` → `bigint`                | Computes the number of input rows.                           |
+| `count("any")`→`bigint`              | Computes the number of input rows in which the input value is not null.<br />Count distinct values: `count(distinct colname)` |
+| `avg(see text)` → see text           | Computes the average (arithmetic mean) of all the non-null input values.<br />For `smallint`, `integer`, `bigint` and  `numeric`, the return type is `numeric`; For `real` and `double precision`, the return type is the `double precision`; For `interval`, the return type is `interval`. |
+| `max(see text)` → same as input type |                                                              |
+| `min(see text)` → same as input type |                                                              |
 
 
 
@@ -1982,8 +1999,6 @@ Another possible syntax:
 <pre>
     <em>row_constructor</em> <em>operator</em> ALL (<em>subquery</em>)
 </pre>
-
-
 ## 9.24 Row and Array Comparisons
 
 This section describes several specialized constructs for making multiple comparisons between groups of values. These forms are syntactically related to the subquery forms of the previous section, but do not involve subqueries.
@@ -2056,41 +2071,6 @@ As an example, suppose we wish to find all the weather records that are in the t
 ```sql
 SELECT w1.city, w1.temp_lo AS low, w1.temp_hi AS high, w2.city, w2.temp_lo AS low, w2.temp_hi AS high FROM weather w1 JOIN weather w2 ON w1.temp_lo < w2.temp_lo AND w1.temp_hi > w2.temp_hi;
 ```
-
-## Aggregate functions
-
-An **aggregate function** computes a single result from multiple input rows.
-
-Common aggregate functions are `count`, `sum`, `avg`, `max` and `min`.
-
-As an example, we can find the highest low-temperature reading anywhere with:
-
-```sql
-SELECT max(temp_lo) FROM weather;
-```
-
-If we wanted to know what city (or cities) that reading occurred in, we might try:
-
-```sql
-SELECT city FROM weather WHERE temp_lo = (SELECT max(temp_lo) FROM weather);
-```
-
-Aggregates are also very useful in combination with **GROUP BY** clauses.
-
-For example, we can get the maximum low temperature observed in each city with:
-
-```sql
-SELECT city, max(temp_lo) FROM weather GROUP BY city;
-```
-
-Filter these grouped rows using `HAVING`:
-
-```sql
-SELECT city, max(temp_lo) FROM weather GROUP BY city
-HAVING max(temp_lo) < 40;
-```
-
-The fundamental difference between **WHERE** and **HAVING** is this: **WHERE** selects input rows **before** groups and aggregates are computed (thus, it controls which rows go into the aggregate computation), whereas **HAVING** selects group rows **after** groups and aggregates are computed.
 
 # Advanced features
 

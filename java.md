@@ -1813,6 +1813,93 @@ There are some other useful methods, such as `nullFirst`, `nullLast`, `naturalOr
 
 ## 6.3 Inner Classes
 
+Inner classes in Java are similar to nested classes in C++.
+
+However, one importance difference is that in Java, an object that comes from an inner class has an implicit reference to the outer class object that instantiated it.
+
+In Java, `static` inner classes do not have this added pointer. They are the Java analog to nested classes in C++.
+
+----
+
+Inner classes are translated into regular class with `$` separating the outer and inner class names.
+
+### 6.3.1 Use of an Inner Class to Access Object State
+
+For example,
+
+```java
+class TalkingClock {
+    private boolean beep;
+    
+    public void start() {
+        var listener = new TimePrinter();
+        var timer = new Timer(interval, listener);
+        timer.start();
+    }
+    
+    public class TimePrinter implements ActionListener {
+        public void actionPerformed(ActionEvent event) {
+            System.out.println("...");
+            if(beep)  // access an instance field of the outer class objects.
+                Toolkit.getDefaultToolkit().beep(); 
+        }
+    }
+}
+```
+
+### 6.3.2 Special Syntax Rules for Inner Classes
+
+The complete syntax for the outer class reference is <code><em>OuterClass</em>.this</code>.
+
+For example, you can write the `actionPerformed` method of the `TimerPrinter` inner class, though reluctant, as follows.
+
+```java
+public void actionPerformed(ActionEvent event) {
+    if(TalkingClock.this.beep) Toolkit.getDefaultToolkit().beep();
+}
+```
+
+Conversely, you can write the inner object constructor more explicitly, using the syntax
+
+<pre>
+    <em>outerObject</em>.new <em>InnerClass</em>(<em>construction parameters</em>)
+</pre>
+
+For example,
+
+```java
+ActionListener listener = this.new TimePrinter();
+```
+
+In this way, it's possible to set the outer class reference to another object by explicit naming it. For example,
+
+```java
+var jabber = new TalkingClock(1000, true);
+TalkingClock.TimePrinter listener = jabber.new TimePrinter();
+```
+
+----
+
+An inner class cannot have `static` methods.
+
+### 6.3.4 Local Inner Classes
+
+You can define the class locally in a single method. Then the scope of the inner class is always restricted to the block in which they are declared.
+
+You should never declare a local class with access specifier.
+
+```java
+public void start() {
+    class TimerPrinter implements ActionListener {
+        ...
+    }
+    var listener = new TimerPrinter();
+    ...
+}
+```
+
+### 6.3.5 Accessing Variables from Outer Methods
+
 
 
 
