@@ -1900,9 +1900,66 @@ public void start() {
 
 ### 6.3.5 Accessing Variables from Outer Methods
 
+Local classes have another advantage over other inner classes. Not only can they access the fields of their outer class; they can even access local variables, including parameters. However, those local variables must be *effectively final*, i.e., they may never change once they've been assigned.
 
+### 6.3.6 Anonymous Inner Classes
 
+When using local inner classes, you don't even need to give the class a name.
 
+```java
+public void start(int interval, boolean beep) {
+    var listener = new ActionListener() {
+        public void actionPerformed(ActionEvent event) {
+            System.out.println(...);
+            if(beep) ...
+        }
+    }
+    var timer = new Timer(interval, listener);
+    timer.start();
+}
+```
+
+In general, the syntax is
+
+<pre>
+    new <em>SuperType</em>(<em>construction parameters</em>) {
+    	<em>inner class methods and data...</em>
+    }
+</pre>
+
+Here, `SuperType` can be an interface, then, the inner class implements that interface. `SuperType` can also be a class, then, the inner class extends that class.
+
+An anonymous inner class cannot have constructors. Instead, the construction parameters are given to the superclass constructor. Though an anonymous class cannot have constructors, you can provide an *object initialization block*.
+
+----
+
+You have to look carefully to see the difference between the construction of a new object of a class and the construction of an object of an anonymous inner class extending that class.
+
+```java
+var queen = new Person("Mary"); // a Person object
+var queen = new Person("Dracula"){...} // inner class object
+```
+
+---
+
+If you store an anonymous class instance in a variable define with `var`, the variable knows about added methods or fields:
+
+```java
+var bob = new Object() { String name = "Bob"; }
+System.out.println(bob.name);
+```
+
+The type of `bob` variable is "`Object` with a `String name` field", which is a non-denotable type.
+
+### 6.3.7 Static Inner Classes
+
+You can suppress the generation of the reference to the outer class by declaring the inner class `static`.
+
+Unlike regular inner classes, static inner classes can have static fields and methods.
+
+## 6.5 Proxies
+
+# Chapter 7. Exceptions, Assertion, and Logging
 
 
 

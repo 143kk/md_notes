@@ -228,7 +228,7 @@ CREATE TABLE products (
 
 Unique constraints ensure that the data contained in a column, or a group of columns, is unique among all the rows in the table.
 
-**It's allowed to contained null values in a column among multiple rows even in the presence of a unique constraint.**
+It's allowed to contained null values in a column among multiple rows even in the presence of a unique constraint. **Null values are not considered equal.**
 
 ```sql
 CREATE TABLE products (
@@ -952,7 +952,7 @@ Alternatively, an arbitrary expression can determine what rows are to be conside
 - `INTERSECT` returns all rows that are both in the result of `query1` and in the result of `query2`. Duplicate rows are eliminated unless `INTERSECT ALL` is used.
 - `EXCEPT` returns all rows that are in the result of `query1` but not in the result of `query2`. (called the difference between two queries.) Again, duplicates are eliminated unless `EXCEPT ALL` is used.
 
-In order to calculate the union, intersection, or difference of two queries, the two queries must be “union compatible”, which means that they return the same number of columns and the corresponding columns have compatible data types.
+In order to calculate the union, intersection, or difference of two queries, the two queries must be “union compatible”, which means that they return the **same number of columns** and the corresponding columns have *compatible data types.
 
 Without parentheses, `UNION` and `EXCEPT` associate left-to-right, but `INTERSECT` binds more tightly than those two operators. For example,
 
@@ -1797,7 +1797,22 @@ You can also search for specific values in an array using the `array_position` a
 
 SQL uses a three-valued logic system with `true`, `false`, and `null`, which represents “unknown”.
 
-Logic operators are `AND`, `OR` and `NOT`. All of them yields `null` as the result if any operand are `null`.
+Logic operators are `AND`, `OR` and `NOT`.
+
+| a     | b     | a AND b   | a OR b   |
+| ----- | ----- | --------- | -------- |
+| TRUE  | TRUE  | TRUE      | TRUE     |
+| TRUE  | FALSE | FALSE     | TRUE     |
+| FALSE | FALSE | FALSE     | FALSE    |
+| TRUE  | NULL  | NULL      | **TRUE** |
+| FALSE | NULL  | **FALSE** | NULL     |
+| NULL  | NULL  | NULL      | NULL     |
+
+| a     | NOT a |
+| ----- | ----- |
+| TRUE  | FALSE |
+| FALSE | TRUE  |
+| NULL  | NULL  |
 
 ## 9.2 Comparison Functions and Operators
 
@@ -1947,7 +1962,7 @@ Since the result depends only on whether any rows are returned, and not on the c
 
 The subquery must return exactly one column. The result of `IN` is true if any equal subquery row is found and false otherwise.
 
-Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand row yields null, the result of the IN construct will be null, not false. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand row yields null, the result of the IN construct will be null, not false. This is in accordance with SQL's normal rules for Boolean combinations of null values. (Alternatively, you can think `IN` as a shortcut of multiple `OR`s, so that the rule applies)
 
 Another usage:
 
@@ -1957,6 +1972,14 @@ Another usage:
 ### 9.23.3 `NOT IN`
 
 Refer to section 9.23.2 `IN`.
+
+Be cautious if you are using `NOT IN(...)` with a null value in it.
+
+```
+value not in(2, 3, null)
+Þ not (value=2 or value=3 or value=null)
+Þ value<>2 and value<>3 and value<>null
+```
 
 ### 9.23.4 `ANY`/`SOME`
 
@@ -2017,60 +2040,186 @@ Note that if the left-hand expression yields null, or if there are no equal righ
 
 The negation of the `IN` operator.
 
+# Ch11. Indexes
 
+## 11.1 Introduction
 
+Postgres supports six kinds of indexes:
 
+- B-Tree Index
+- Hash Index
+- Generalized Search Tree (GiST)
+- Space Partitioned GiST (SP-GiST)
+- Generalized Inverted Index (GIN)
+- Block Range Index (BRIN)
 
-## Joins between tables
-
-Queries that access multiple tables (or multiple instances of the same table) at one time are called **join
-queries**.
-
-Return all the weather records together with the location of the associated city:
-
-```sql
-SELECT city, temp_lo, temp_hi, prcp, date, location FROM weather JOIN cities ON city = name;
-```
-
-Since the columns all had different names, the parser automatically found which table they belong to. 
-If there were duplicate column names in the two tables you'd need to qualify the column names to show
-which one you meant, as in:
+The following command can be used to create an index of **the default index, B-Tree Index **, on the `id` column:
 
 ```sql
-SELECT weather.city, weather.temp_lo, weather.temp_hi,weather.prcp, weather.date, cities.location FROM weather JOIN cities ON weather.city = cities.name;
+CREATE INDEX test_id_index ON test1 (id);
 ```
 
-An alternative form of join queries:
+You can specify other kinds of index with the keyword `USING`. For example, create a Hash index:
 
 ```sql
-SELECT * FROM weather, cities WHERE city = name;
+CREATE INDEX surname_index on people USING HASH (surname);
 ```
 
-### Outer joins
+To remove an index, use the `DROP INDEX` command.
 
-The joins we have seen so far are **inner joins**.
+## 11.2 B-Tree
 
-If no matching row is found we want some “empty values” to be substituted for the cities table's columns. This kind of query is called an **outer join**.
+B-trees can handle **equality** and **range queries** on data that can be sorted into some ordering. Also, an **IS NULL** or **IS NOT NULL** condition on an index column can be used with a B-tree index.
 
-An example of (left) outer join:
+The optimizer can also use a B-tree index for queries involving the pattern matching operators `LIKE` and `~` if the pattern is a constant and is anchored to the beginning of the string — for example, `col LIKE 'foo%'` or `col ~ '^foo'`, but not `col LIKE '%bar'`.
+
+
+
+## 11.3 Multicolumn Indexes
+
+In this section, we only talk about multi-column B-Tree indexes though Postgres supports other types.
+
+For example, define an B-Tree index on the columns `major` and `minor` together:
 
 ```sql
-SELECT * FROM weather LEFT OUTER JOIN cities ON weather.city = cities.name;
+CREATE INDEX test2_mm_idx ON test2 (major, minor);
 ```
 
-This query is called a **left outer join** because the table mentioned on the left of the join operator will have each of its rows in the output **at least once**. When outputting a left-table row for which there is no right-table match, empty (null) values are substituted for the right-table columns.
+Then, the key of each node of the B-Tree is represented by a tuple rather than a single value. And the index will be ordered by the first key element, then by the second key element and so on. 
 
-Apart from left outer joins, there are also right outer joins and full outer joins.
+Therefore, in order to take advantage of a multi-column B-Tree index, your query conditional should always contain a **prefix** of the index. The exact rule is that equality constraints on leading columns, plus any inequality constraints on the first column that does not have an equality constrain. (equality first, then ranges).
 
-### Self joins
+## 11.4 Indexes and `ORDER BY`
 
-We can also join a table against itself. This is called a **self join**.
+Of the index types currently supported by PostgreSQL, **only B-tree** can produce sorted output — the other index types return matching rows in an unspecified, implementation-dependent order.
 
-As an example, suppose we wish to find all the weather records that are in the temperature range of other weather records.
+The planner will consider satisfying an ORDER BY specification either by scanning an available index that matches the specification, or by scanning the table in physical order and doing an explicit sort.
+
+An important special case is `ORDER BY` in combination with `LIMIT n`: an explicit sort will have to process all the data to identify the first n rows, but if there is an index matching the `ORDER BY`, the first n rows can be retrieved directly, without scanning the remainder at all.
+
+By default, B-tree indexes store their entries in **ascending order with nulls last** (table TID is treated as a tiebreaker column among otherwise equal entries). And the index supports both forward scans and backward scans, i.e., producing output satisfying `ORDER BY x ASC NULL LAST`, or `ORDER BY x DESC NULL FIRST`.
+
+You can adjust the ordering of a B-tree index:
 
 ```sql
-SELECT w1.city, w1.temp_lo AS low, w1.temp_hi AS high, w2.city, w2.temp_lo AS low, w2.temp_hi AS high FROM weather w1 JOIN weather w2 ON w1.temp_lo < w2.temp_lo AND w1.temp_hi > w2.temp_hi;
+CREATE INDEX test2_info_nulls_low ON test2 (info DESC NULLS LAST);
 ```
+
+## 11.5 Combining Multiple Indexes
+
+To combine multiple indexes, the system scans each needed index and prepares a bitmap in memory giving the locations of table rows that are reported as matching that index's conditions. The bitmaps are then ANDed and ORed together as needed by the query. Finally, the actual table rows are visited and returned.
+
+So any ordering of the original indexes is lost, and so a separate sort step will be needed if the query has an `ORDER BY` clause. For this reason, the planner will sometimes choose to use a simple index even though additional indexes are available.
+
+## 11.6 Unique Indexes
+
+Normally, there's no need to manually create indexes on unique columns, because PostgreSQL automatically creates a unique index when a unique constraint or primary key is defined for a table.
+
+<pre>
+    CREATE UNIQUE INDEX <em>name</em> ON <em>table</em> (<em>column</em> [, ...]);
+</pre>
+
+## 11.7 Indexes on Expressions
+
+An index column need not be just a column of the underlying table, but can be an expression.
+
+Index expressions are relatively expensive to maintain, because the derived expression(s) must be computed for each row upon insertion and whenever it is updated. However, the index expressions are not recomputed during an indexed search, since they are already stored in the index.
+
+----
+
+For example, a common way to do case-insensitive comparisons is to use the lower function:
+
+```sql
+SELECT * FROM test1 WHERE lower(col1) = 'value';
+```
+
+This query can use an index if one has been defined on the result of the lower(col1) function:
+
+```sql
+CREATE INDEX test1_lower_col1_idx ON test1 (lower(col1));
+```
+
+As another example, if one often does queries like:
+
+```sql
+SELECT * FROM people WHERE (first_name || ' ' || last_name) = 'John Smith';
+```
+
+then it might be worth creating an index like this:
+
+```sql
+CREATE INDEX people_names ON people ((first_name || ' ' || last_name));
+```
+
+## 11.8 Partial Indexes
+
+A partial index is an index built over a subset of a table; the subset is defined by a conditional expression (called the *predicate* of the partial index).
+
+A partial index can be used in a query only if the system can recognize that the `WHERE` condition of the query mathematically implies the predicate of the index.
+
+----
+
+Examples:
+
+```sql
+CREATE INDEX access_log_client_ip_ix ON access_log (client_ip)
+WHERE NOT (client_ip > inet '192.168.100.0' AND client_ip < inet '192.168.100.255');
+```
+
+You can use partical indexes as a trick to enforces uniqueness among the rows that satisfy the index predicate, without constraining those that do not. For example,
+
+```sql
+CREATE UNIQUE INDEX tests_success_constraint ON tests (subject, target) WHERE success;
+```
+
+## 11.9 Index-Only Scans and Covering Indexes
+
+All indexes in PostgreSQL are secondary indexes, meaning that each index is stored separately from the table's main data area (which is called the table's *heap* in PostgreSQL terminology).
+
+This means that in an ordinary index scan, each row retrieval requires fetching data from both the index and the heap. . The heap-access portion of an index scan thus involves a lot of random access into the heap, which can be slow. To solve this performance problem,  PostgreSQL supports *index-only scans*.
+
+The basic idea is to return values directly out of each index entry instead of consulting the associated heap entry. There are two fundamental restrictions on when this method can be used:
+
+1. The index type must support index-only scans. B-tree indexes always do.
+2. The query must reference only columns stored in the index. (in select lists, `WHERE` clauses...)
+
+----
+
+To make effective use of the index-only scan feature, you might choose to create a *covering index*, where some columns are just “payload” and are not part of the search key. 
+
+This is done by adding an `INCLUDING` clause. For example, if you commonly run queries like:
+
+```sql
+SELECT y FROM tab WHERE x = 'key';
+```
+
+Then an index defined as
+
+```sql
+CREATE INDEX tab_x_y ON tab(x) INCLUDE (y);
+```
+
+could handle these queries as index-only scans.
+
+----
+
+Currently, PostgreSQL's planner is currently not very smart about index-only scans with expression indexes. For example,  the query
+
+```sql
+SELECT f(x) FROM tab WHERE f(x) < 1;
+```
+
+will not employ index-only scans if given an index on `f(x)`. To fix this, add `x` as an included column:
+
+```sql
+CREATE INDEX tab_f_x ON tab (f(x)) INCLUDE (x);
+```
+
+## Extra Reading
+
+[PostgreSQL B-Tree Index Explained - PART 1](https://www.qwertee.io/blog/postgresql-b-tree-index-explained-part-1/)
+
+
 
 # Advanced features
 
