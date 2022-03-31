@@ -1844,6 +1844,15 @@ Do **NOT** write expression = NULL because NULL is not “equal to” NULL. Inst
 
 Similarly, `IS TRUE`, `IS FALSE` and `IS UNKNOWN` will always return true or false, never a null value, even when the operand is null.
 
+## 9.4 String Functions and Operators
+
+| Function/Operator                                            | Description                                                  | Example(s)                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------- |
+| `text || text -> text`                                       | Concatenates two strings                                     | `'Post'|| greSQL -> PostgreSQL` |
+| `text || anynonarray -> text`<br />`anynonarray || text -> text` | Converts the non-string input to text, then concatenates the two strings. | `'Value: ' || 42 -> Value: 42`  |
+
+
+
 ## 9.7 Pattern Matching
 
 ### 9.7.1 `LIKE`, `ILIKE`
@@ -1926,6 +1935,14 @@ a | case
 
 Since the second form of `CASE` clause implicitly use equality test(`=`), you cannot not write something like `CASE a WHEN null...`. Instead, you should use `CASE WHEN a is null...`. 
 
+### 9.18.2 `COALESCE`
+
+<pre>
+    COALESCE(<em>value</em> [, ...])
+</pre>
+
+The `COALESCE` function returns the first of its arguments that is not null. Null is returned only if all arguments are null.
+
 ## 9.21 Aggregate Functions
 
 Aggregate functions compute a single result from a set of input values.
@@ -1950,7 +1967,7 @@ Commonly used aggregate functions:
     EXISTS (<em>subquery</em>)
 </pre>
 
-The subquery is evaluated to determine whether it returns any rows. If it returns at least one row, the result of `EXISTS` is “true”; if the subquery returns no rows, the result of `EXISTS` is “false”.
+The subquery is evaluated to determine whether it returns any rows. **If it returns at least one row, the result of `EXISTS` is “true”; if the subquery returns no rows, the result of `EXISTS` is “false”.**
 
 Since the result depends only on whether any rows are returned, and not on the contents of those rows, the output list of the subquery is normally unimportant. A common coding convention is to write all `EXISTS` tests in the form `EXISTS(SELECT 1 WHERE ...)`.
 
@@ -2219,7 +2236,40 @@ CREATE INDEX tab_f_x ON tab (f(x)) INCLUDE (x);
 
 [PostgreSQL B-Tree Index Explained - PART 1](https://www.qwertee.io/blog/postgresql-b-tree-index-explained-part-1/)
 
+# Ch14. Performance Tips
 
+## 14.4 Populating a Database
+
+### 14.4.1. Disable Autocommit
+
+When using multiple `INSERTs`, turn off autocommit and just do one commit at the end.
+
+### 14.4.2 Use `COPY`
+
+Use `COPY` to load all the rows in one command, instead of using a series of `INSERT` commands. The `COPY` command is optimized for loading large numbers of rows; it is less flexible than `INSERT`, but incurs significantly less overhead for large data loads.
+
+Note that loading a large number of rows using COPY is almost always faster than using `INSERT`, even if `PREPARE` is used and multiple insertions are batched into a single transaction.
+
+`COPY` is fastest when used within the same transaction as an earlier `CREATE TABLE` or `TRUNCATE` command. In such cases no WAL needs to be written, because in case of an error, the files containing the newly loaded data will be removed anyway. However, this consideration only applies when `wal_level` is `minimal` as all commands must write WAL otherwise.
+
+### 14.4.3 Remove Indexes
+
+If you are loading a freshly created table, the fastest method is to create the table, bulk load the table's data using `COPY`, then create any indexes needed for the table. Creating an index on pre-existing data is quicker than updating it incrementally as each row is loaded.
+If you are adding large amounts of data to an existing table, it might be a win to drop the indexes, load the table, and then recreate the indexes.
+
+### 14.4.4 Remove Foreign Key Constraints
+
+Just as with indexes, a foreign key constraint can be checked “in bulk” more efficiently than row-by-row. So it might be useful to drop foreign key constraints, load data, and re-create the constraints.
+
+### 14.4.5 Increase `maintenance_work_mem`
+
+This will help to speed up `CREATE INDEX` commands and `ALTER TABLE ADD FOREIGN KEY` commands. It won't do much for `COPY` itself.
+
+### 14.4.6 Increase `max_wal_size`
+
+Temporarily increasing the `max_wal_size` configuration variable can also make large data loads faster.
+
+### 14.4.7 Disable WAL Archival and Streaming Replication
 
 # Advanced features
 

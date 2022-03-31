@@ -664,15 +664,48 @@ func(2);
 
 
 
-### 右值引用 rvalue reference (c++11)
+### Rvalue Reference (c++11)
 
-右值包括字面值，表达式，和常规函数的返回值。
+To begin with, there is a introduction to *lvalue* and *rvalue*.
+
+Every expression in C++ is either an *rvalue* or an *lvalue*. These names are inherited from C because originally lvalues could stand on the left-hand side of an assignment whereas rvalues could not.
+
+We can use lvalue whenever an rvalue is required, but we cannot use an rvalue where an lvalue is required.
+
+Actually, you have already used several operators that involve lvalues:
+
+- Assignment operator(`=`) requires a (non-const) lvalue as its left-hand operand and yields its left-hand operand as an lvalue.
+- The address-of operator(`&`) requires an lvalue operand and returns a pointer to its operand as an rvalue.
+- The built-in and iterator increment and decrement operators require lvalue operands and the prefix version also yield lvalues.
+- The subscript operator(`[]`) returns an lvalue reference.
+- And more...
+
+----
+
+We refer to the regular references(single `&`) as *lvalue references*.
+
+An *rvalue reference*, obtained by using `&&`,  is a reference that **must be bound to an rvalue**.
 
 ```cpp
-int && a = 100;
-int b = 20;
-int && c = 2*b + 3;
+int i = 42;
+int &r = i; // ok: bind an lvalue reference to an lvalue
+int &&r = i; // error: cannot bind an rvalue reference to an lvalue
+int &r2 = i * 42; // error: i*42 is an rvalue
+
+const int &r3 = i * 42; // ok: we can bind an lvalue reference to const to an rvalue
+int &&rr2 = i * 42; // ok
 ```
+
+-----
+
+Although we cannot directly bind an rvalue reference to an lvalue, we can explicity cast an lvalue to its corresponding rvalue reference type using the `move` function, which is defined in the `<utility>` header.
+
+```cpp
+int x = 3;
+int &&y = std::move(x);
+```
+
+After a call to move, we should not use the value of a moved-from object.
 
 ## Corner cases
 
@@ -733,7 +766,11 @@ cout << &a3 << endl;
 */
 ```
 
+----
 
+A call `reserve` changes the capacity of the `vector`(memory allocated). A call to `resize` change the number of elements in the container, not its capacity.
+
+You can use `capacity` to see the capacity of a vector. If the capacity is not enough for newly inserted elements, then a vector will request a larger capacity and move all of its elements to the newly allocated memory.
 
 ## 常量
 
@@ -1108,6 +1145,81 @@ auto func(T1 x, T2 y) -> decltype(x+y);
 ```
 
 `auto`相当于占位符，表示实际的返回类型在后面。
+
+### 可变参数
+
+可变参数宏, 头文件`<cstd>`
+
+```cpp
+int sum(int count, ...) {
+	va_list ap;
+	va_start(ap, count);
+
+	int sum = 0;
+	for(int i = 0; i < count; ++i) {
+		sum += va_arg(ap, int);
+	}
+	va_end(ap);
+	return sum;
+}
+
+cout << sum(4, 1, 2, 3, 4) << endl; // 10
+```
+
+### Variadic Templates
+
+```cpp
+template <typename... Args> // Args is a template parameter pack
+void show_list(Args... args) {} // args is a function parameter pack
+```
+
+`Args` is a *template parameter pack*, which matches any number of types, including **none**.
+
+----
+
+You can unpack the pack by placing the ellipsis(`...`) to the right of the function parameter pack name. For example,
+
+```cpp
+template <typename... Args>
+void show_list(Args... args) {
+    show_list(args...);
+}
+```
+
+The notation `args...` expands to a list of discrete function argument. Supose we have this function call `show_list(5, 'l', 0,5)`, then within the function, `show_list(args...)` expands to `show_list(5, 'l', 0,5)`.
+
+----
+
+```cpp
+int sum() { return 0; }
+
+template <typename... Args>
+int sum(int x, Args... args) {
+	return x + sum(args...);
+}
+```
+
+In this example, the parameter list is shortened by one item.  We need a version of `sum` with no argument when `args` is empty finally.
+
+----
+
+```cpp
+template <typename T>
+void show_list(const T& val) {
+	cout << val << endl;
+}
+
+
+template <typename T, typename... Args>
+void show_list(const T& val, const Args&... args) {
+	cout << val << ", ";
+	show_list(args...);
+}
+```
+
+In this example, you can use how to use `const` references with function parameter pack.
+
+Note that it's not necessary to have a version of `show_list` with no arguments. Because when `args` pack is reduced to one item, the very first function will be called.
 
 ## IO
 
@@ -1559,6 +1671,61 @@ Tips
 - new分配内存要记得释放
 
 ![image-20211231092122041](/home/arv/.config/Typora/typora-user-images/image-20211231092122041.png)
+
+### Move Constructor and Move Assignment
+
+Different from the copy constructor/assignment, the reference parameter in the move constructor/assignment is an rvalue reference.
+
+The move constructor/assignment must ensure that **the moved-from object is left in a state such that destroying that object will be harmless**.
+
+**Moreover, move constructor and move assignment operators that cannot throw exception should be marked as `noexcept`**. For example, `vector` must use a copy constructor instead of a move constructor during reallocation unless it knows that the element type's move constructor cannot throw an exception.
+
+```cpp
+// Copy constructor
+MyVec::MyVec(const MyVec &v) : cap(v.cap){
+    elements = new int[v.cap];
+    memcpy(elements, v.elements, v.cap * sizeof(int));
+}
+
+// Copy assignment operator
+MyVec & MyVec::operator=(const MyVec &v) {
+    if(&v == this) return *this;
+    free(elements);
+    elements = new int[v.cap];
+    memcpy(elements, v.elements, v.cap * sizeof(int));
+    return *this;
+}
+
+// Move constructor
+MyVec::MyVec(const MyVec &&v) noexcept : cap(v.cap), elements(v.elements){
+    // "steal" resources and not need to allocate new memery
+    // leave v in a state in which it's safe to run the destructor
+    v.elements = nullptr;
+}
+
+// Move assignemnt operator
+MyVec & MyVec::operator=(const MyVec &&v) noexcept {
+    if(&v == this) return *this;
+    // "steal" resources and not need to allocate new memery
+    // leave v in a state in which it's safe to run the destructor
+    cap = v.cap;
+    elements = v.elements;
+    return *this;
+}
+
+MyVec::~MyVec() {
+    free(elements);
+    elements = nullptr;
+}
+```
+
+----
+
+The complier synthesizes the move constructor and move assignment only if a class does not define any of its own copy constructor or copy assignment, and only if all data members can be moved constructed and move assigned, respectively.
+
+Classes that define a move constructor or move-assignment operator must also define their own copy operations. Otherwise, those members are deleted by default.
+
+
 
 ### 继承
 
